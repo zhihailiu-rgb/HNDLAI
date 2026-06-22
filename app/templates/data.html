@@ -1,0 +1,178 @@
+﻿{% extends "base.html" %}
+{% block nav_data %}active{% endblock %}
+{% block title %}数据管理 - 海南省人工费调整指数管理系统{% endblock %}
+{% block content %}
+<div class="page-title d-flex justify-content-between align-items-center">
+    <div><h4>数据管理</h4><div class="breadcrumb text-muted">首页 / 数据管理</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openAddModal()"><i class="bi bi-plus-lg"></i> 录入价格</button>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="filterProject" onchange="loadPrices()">
+                    <option value="">全部项目</option>
+                    {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="filterWorker" onchange="loadPrices()">
+                    <option value="">全部工种</option>
+                    {% for w in worker_types %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-auto"><span class="text-muted small" id="priceCount">加载中...</span></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-table me-1"></i>劳务价格记录</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead><tr>
+                    <th>ID</th><th>项目名称</th><th>工种</th><th>市场单价</th>
+                    <th>数据日期</th><th>来源</th><th>状态</th><th>操作</th>
+                </tr></thead>
+                <tbody id="priceBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header"><i class="bi bi-graph-up me-1"></i>价格趋势</div>
+    <div class="card-body">
+        <div class="row mb-2">
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="trendWorker" onchange="loadTrend()">
+                    <option value="">全部工种</option>
+                    {% for w in worker_types %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div id="trendChart" class="echart-container"></div>
+    </div>
+</div>
+
+<!-- 新增 Modal -->
+<div class="modal fade" id="priceModal" tabindex="-1">
+<div class="modal-dialog">
+<div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">录入劳务价格</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <form id="priceForm">
+            <div class="mb-2"><label class="form-label">项目</label>
+                <select class="form-select form-select-sm" id="addProject">
+                    {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+                </select></div>
+            <div class="mb-2"><label class="form-label">工种</label>
+                <select class="form-select form-select-sm" id="addWorker">
+                    {% for w in worker_types %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+                </select></div>
+            <div class="mb-2"><label class="form-label">市场单价（元/工日）</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="addPrice" required></div>
+            <div class="mb-2"><label class="form-label">数据日期</label>
+                <input type="date" class="form-control form-control-sm" id="addDate" required></div>
+            <div class="mb-2"><label class="form-label">数据来源</label>
+                <select class="form-select form-select-sm" id="addSource">
+                    <option>劳务分包结算</option><option>市场询价</option><option>广联达计价</option><option>其他</option>
+                </select></div>
+            <div class="mb-2"><label class="form-label">备注</label>
+                <input class="form-control form-control-sm" id="addRemark"></div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="savePrice()">保存</button>
+    </div>
+</div></div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadPrices() {
+    const pid = document.getElementById("filterProject").value;
+    const wid = document.getElementById("filterWorker").value;
+    let url = "/data/api/list?";
+    if (pid) url += "project_id=" + pid + "&";
+    if (wid) url += "worker_type_id=" + wid + "&";
+    api(url).then(data => {
+        const b = document.getElementById("priceBody");
+        b.innerHTML = data.map(p => `<tr>
+            <td>${p.id}</td>
+            <td>${p.project_name}</td>
+            <td>${p.worker_type_name}</td>
+            <td><strong>${p.unit_price}</strong> 元</td>
+            <td>${p.data_date}</td>
+            <td>${p.source || "-"}</td>
+            <td>${p.is_verified ? '<span class="badge bg-success">已审核</span>' : '<span class="badge bg-warning text-dark">待审核</span>'}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="toggleVerify(${p.id})" title="审核切换"><i class="bi bi-check-circle"></i></button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deletePrice(${p.id})"><i class="bi bi-trash"></i></button>
+            </td>
+        </tr>`).join("");
+        document.getElementById("priceCount").textContent = "共 " + data.length + " 条记录";
+        loadTrend();
+    });
+}
+function openAddModal() {
+    document.getElementById("priceForm").reset();
+    const today = new Date().toISOString().slice(0,10);
+    document.getElementById("addDate").value = today;
+    new bootstrap.Modal(document.getElementById("priceModal")).show();
+}
+function savePrice() {
+    const data = {
+        project_id: parseInt(document.getElementById("addProject").value),
+        worker_type_id: parseInt(document.getElementById("addWorker").value),
+        unit_price: parseFloat(document.getElementById("addPrice").value),
+        data_date: document.getElementById("addDate").value,
+        source: document.getElementById("addSource").value,
+        remark: document.getElementById("addRemark").value,
+    };
+    if (!data.unit_price || !data.data_date) { showToast("请填写完整信息", "warning"); return; }
+    api("/data/api/add", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) }).then(r => {
+        if (r.success) { showToast("录入成功", "success");
+            bootstrap.Modal.getInstance(document.getElementById("priceModal")).hide();
+            loadPrices(); }
+    });
+}
+function deletePrice(id) {
+    if (!confirm("确定删除？")) return;
+    api("/data/api/delete/" + id, { method: "POST" }).then(r => {
+        if (r.success) { showToast("已删除", "success"); loadPrices(); }
+    });
+}
+function toggleVerify(id) {
+    api("/data/api/verify/" + id, { method: "POST" }).then(r => {
+        if (r.success) { showToast("审核状态已更新", "success"); loadPrices(); }
+    });
+}
+function loadTrend() {
+    const wid = document.getElementById("trendWorker").value;
+    let url = "/data/api/trend?";
+    if (wid) url += "worker_type_id=" + wid;
+    api(url).then(data => {
+        const chart = echarts.init(document.getElementById("trendChart"));
+        const option = {
+            tooltip: { trigger: "axis" },
+            legend: { type: "scroll", bottom: 0, itemWidth: 12, itemHeight: 8 },
+            grid: { left: "8%", right: "5%", bottom: "20%", top: "5%", containLabel: true },
+            xAxis: { type: "category", data: data.length > 0 ? data[0].data.map(d => d.date) : [] },
+            yAxis: { type: "value", name: "元/工日" },
+            series: data.map(s => ({
+                name: s.name, type: "line", data: s.data.map(d => d.price),
+                smooth: true, symbol: "circle", symbolSize: 6
+            }))
+        };
+        chart.setOption(option);
+        window.addEventListener("resize", () => chart.resize());
+    });
+}
+loadPrices();
+</script>
+{% endblock %}
