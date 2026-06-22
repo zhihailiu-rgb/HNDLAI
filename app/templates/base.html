@@ -1,0 +1,114 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}海南省人工费调整指数管理系统{% endblock %}</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+    <style>
+        body { background: #f0f2f5; font-size: .875rem; }
+        .sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0; width: 240px;
+            background: #001529; color: #fff; z-index: 100;
+            overflow-y: auto;
+        }
+        .sidebar .brand {
+            padding: 18px 20px; font-size: 1rem; font-weight: 600;
+            border-bottom: 1px solid rgba(255,255,255,.1);
+            background: #002140;
+        }
+        .sidebar .brand small { font-size: .72rem; color: #a0aec0; display: block; font-weight: 400; }
+        .sidebar .nav-item { padding: 0; }
+        .sidebar .nav-link {
+            padding: 11px 20px; color: rgba(255,255,255,.7);
+            border-left: 3px solid transparent; transition: all .2s;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: #fff; background: rgba(255,255,255,.05);
+            border-left-color: #1890ff;
+        }
+        .sidebar .nav-link i { margin-right: 10px; font-size: 1rem; }
+        .main-content { margin-left: 240px; min-height: 100vh; padding: 20px 24px; }
+        .page-header { margin-bottom: 20px; }
+        .page-header h4 { font-weight: 600; margin: 0; }
+        .page-header .text-muted { font-size: .8rem; }
+        .card { border: none; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
+        .card-header {
+            background: #fff; border-bottom: 1px solid #f0f0f0;
+            padding: 12px 16px; font-weight: 500;
+        }
+        .stat-card { text-align: center; padding: 20px 16px; }
+        .stat-card .number { font-size: 1.8rem; font-weight: 700; color: #1890ff; }
+        .stat-card .label { font-size: .82rem; color: #666; margin-top: 4px; }
+        .stat-card .icon { font-size: 2rem; color: #1890ff; opacity: .15; position: absolute; right: 16px; top: 16px; }
+        .stat-card { position: relative; }
+        .page-title {
+            background: #fff; padding: 18px 24px; margin: -20px -24px 20px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        .page-title h4 { margin: 0; font-weight: 600; }
+        .page-title .breadcrumb { margin: 4px 0 0; font-size: .8rem; }
+        .table th { font-weight: 500; color: #555; border-top: none; background: #fafafa; }
+        .badge-index { background: #e6f7ff; color: #1890ff; font-weight: 600; }
+        .echart-container { width: 100%; height: 320px; }
+        .echart-container-sm { width: 100%; height: 260px; }
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="brand">
+        人工费指数管理
+        <small>海南省建设标准定额站</small>
+    </div>
+    <ul class="nav flex-column mt-2">
+        <li class="nav-item">
+            <a class="nav-link {% block nav_dashboard %}{% endblock %}" href="/">
+                <i class="bi bi-speedometer2"></i>仪表盘
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% block nav_projects %}{% endblock %}" href="/projects/">
+                <i class="bi bi-building"></i>项目管理
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% block nav_data %}{% endblock %}" href="/data/">
+                <i class="bi bi-database"></i>数据管理
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% block nav_index %}{% endblock %}" href="/index/">
+                <i class="bi bi-graph-up-arrow"></i>指数管理
+            </a>
+        </li>
+    </ul>
+</div>
+<div class="main-content">
+    {% block content %}{% endblock %}
+</div>
+<div class="toast-container" id="toastContainer"></div>
+<script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+function showToast(msg, type) {
+    type = type || "success";
+    const c = document.getElementById("toastContainer");
+    const t = document.createElement("div");
+    t.className = "toast align-items-center text-bg-" + type + " border-0 show";
+    t.role = "alert";
+    t.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+    c.appendChild(t);
+    setTimeout(() => { t.remove(); }, 3000);
+}
+const API_BASE = "";
+async function api(path, opts) {
+    opts = opts || {};
+    const resp = await fetch(API_BASE + path, opts);
+    return resp.json();
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
