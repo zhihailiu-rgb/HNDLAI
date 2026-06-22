@@ -1,24 +1,37 @@
 ﻿# -*- coding: utf-8 -*-
 from flask import Blueprint, jsonify, request, render_template
+from math import ceil
 from datetime import datetime
 from app import db
-from app.models import Project, ProjectType, City
+from app.models import (Project, ProjectType, City,
+                         LaborPrice, IndexResult)
 
 projects_bp = Blueprint("projects", __name__, url_prefix="/projects")
 
 
 @projects_bp.route("/")
 def projects_page():
-    """项目管理页面"""
-    types = ProjectType.query.all()
+    types = ProjectType.query.order_by(ProjectType.name).all()
     cities = City.query.all()
     return render_template("projects.html", types=types, cities=cities)
 
 
 @projects_bp.route("/api/list")
 def list_projects():
-    projects = Project.query.order_by(Project.created_at.desc()).all()
-    return jsonify([p.to_dict() for p in projects])
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = min(per_page, 100)
+
+    q = Project.query.order_by(Project.created_at.desc())
+    total = q.count()
+    pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "items": [p.to_dict() for p in pagination.items],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": ceil(total / per_page) if total > 0 else 1,
+    })
 
 
 @projects_bp.route("/api/get/<int:pid>")
@@ -68,7 +81,6 @@ def update_project(pid):
 @projects_bp.route("/api/delete/<int:pid>", methods=["POST"])
 def delete_project(pid):
     p = Project.query.get_or_404(pid)
-    # 删除关联数据
     LaborPrice.query.filter_by(project_id=pid).delete()
     IndexResult.query.filter_by(project_id=pid).delete()
     db.session.delete(p)
