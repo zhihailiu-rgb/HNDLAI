@@ -1,25 +1,28 @@
 ﻿# -*- coding: utf-8 -*-
 from flask import Blueprint, jsonify, request, render_template
+from math import ceil
 from datetime import datetime, date
 from app import db
 from sqlalchemy import func
 from app.models import (LaborPrice, QuotaBase, IndexResult,
-                         WorkerType, Project, ProjectType, City)
+                         WorkerType, Project)
+import calendar
 
 index_bp = Blueprint("index_mgr", __name__, url_prefix="/index")
 
 
 @index_bp.route("/")
 def index_page():
-    """指数管理页面"""
-    worker_types = WorkerType.query.all()
-    projects = Project.query.all()
+    worker_types = WorkerType.query.order_by(WorkerType.name).all()
+    projects = Project.query.order_by(Project.name).all()
     return render_template("index.html", worker_types=worker_types, projects=projects)
 
 
 @index_bp.route("/api/results")
 def list_results():
-    """查询指数计算结果"""
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = min(per_page, 100)
     year = request.args.get("year", type=int)
     quarter = request.args.get("quarter", type=int)
     project_id = request.args.get("project_id", type=int)
@@ -38,18 +41,21 @@ def list_results():
     if published_only:
         q = q.filter_by(is_published=True)
 
-    results = q.order_by(IndexResult.year.desc(), IndexResult.quarter.desc()).all()
-    return jsonify([r.to_dict() for r in results])
+    q = q.order_by(IndexResult.year.desc(), IndexResult.quarter.desc(),
+                    IndexResult.id.desc())
+    total = q.count()
+    pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "items": [r.to_dict() for r in pagination.items],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": ceil(total / per_page) if total > 0 else 1,
+    })
 
 
 @index_bp.route("/api/calculate", methods=["POST"])
 def calculate_index():
-    """
-    计算人工费调整指数
-    公式：A = (Pa / Pj) x 100
-    Pa = 报告期平均人工单价（市场数据）
-    Pj = 基期人工单价（定额基期价格）
-    """
     data = request.get_json() or {}
     year = data.get("year", datetime.utcnow().year)
     quarter = data.get("quarter", ((datetime.utcnow().month - 1) // 3) + 1)
@@ -60,18 +66,14 @@ def calculate_index():
 
     for project in projects:
         for wt in worker_types:
-            # 获取该工种基期价格（统一为148）
             base = QuotaBase.query.filter_by(worker_type_id=wt.id).first()
             base_price = base.base_price if base else 148.0
 
-            # 计算该工种在该项目该季度的市场平均价格
-            # 确定季度日期范围
             quarter_start = date(year, (quarter - 1) * 3 + 1, 1)
             if quarter == 4:
                 quarter_end = date(year, 12, 31)
             else:
                 quarter_end = date(year, quarter * 3, 1)
-                import calendar
                 _, last_day = calendar.monthrange(quarter_end.year, quarter_end.month)
                 quarter_end = date(quarter_end.year, quarter_end.month, last_day)
 
@@ -86,11 +88,9 @@ def calculate_index():
 
             if avg_price is None or avg_price == 0:
                 continue
-
             avg_price = float(avg_price)
             index_value = round((avg_price / base_price) * 100, 2)
 
-            # 检查是否已有记录
             existing = IndexResult.query.filter_by(
                 project_id=project.id,
                 worker_type_id=wt.id,
@@ -121,7 +121,6 @@ def calculate_index():
 
 @index_bp.route("/api/publish/<int:rid>", methods=["POST"])
 def publish_index(rid):
-    """发布单条指数"""
     r = IndexResult.query.get_or_404(rid)
     r.is_published = True
     r.publish_date = date.today()
@@ -131,7 +130,6 @@ def publish_index(rid):
 
 @index_bp.route("/api/batch-publish", methods=["POST"])
 def batch_publish():
-    """批量发布指定年季的指数"""
     data = request.get_json()
     year = data["year"]
     quarter = data["quarter"]
@@ -145,8 +143,6 @@ def batch_publish():
 
 @index_bp.route("/api/summary")
 def index_summary():
-    """指数综合概览"""
-    # 所有年份季度
     periods = db.session.query(
         IndexResult.year, IndexResult.quarter,
         func.avg(IndexResult.index_value).label("avg_index"),
@@ -160,7 +156,6 @@ def index_summary():
         "count": p.count,
     } for p in periods]
 
-    # 各工种平均指数
     worker_index = db.session.query(
         WorkerType.name,
         func.avg(IndexResult.index_value).label("avg_index"),
