@@ -1,0 +1,127 @@
+﻿{% extends "base.html" %}
+{% block nav_dashboard %}active{% endblock %}
+{% block title %}仪表盘 - 海南省人工费调整指数管理系统{% endblock %}
+{% block content %}
+<div class="page-title">
+    <h4>仪表盘</h4>
+    <div class="breadcrumb text-muted">首页 / 仪表盘</div>
+</div>
+
+<div class="row g-3 mb-4" id="statCards">
+    <div class="col-md-3"><div class="card stat-card"><div class="number" id="statProjects">-</div><div class="label">工程项目总数</div><i class="bi bi-building icon"></i></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="number" id="statPrices">-</div><div class="label">价格记录总数</div><i class="bi bi-database icon"></i></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="number" id="statIndex">-</div><div class="label">计算指数总数</div><i class="bi bi-calculator icon"></i></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="number" id="statLatestIndex">-</div><div class="label">最新综合指数</div><i class="bi bi-graph-up-arrow icon"></i></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card"><div class="card-header"><i class="bi bi-graph-up me-1"></i>人工费综合指数趋势</div>
+            <div class="card-body"><div id="trendChart" class="echart-container"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-header"><i class="bi bi-pie-chart me-1"></i>工程类型分布</div>
+            <div class="card-body"><div id="typeChart" class="echart-container-sm" style="height:260px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><i class="bi bi-people me-1"></i>各工种平均市场单价（元/工日）</div>
+            <div class="card-body"><div id="workerPriceChart" class="echart-container"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><i class="bi bi-geo-alt me-1"></i>各城市平均市场单价（元/工日）</div>
+            <div class="card-body"><div id="cityPriceChart" class="echart-container"></div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+    const data = await api("/api/dashboard/stats");
+
+    document.getElementById("statProjects").textContent = data.project_count;
+    document.getElementById("statPrices").textContent = data.price_count;
+    document.getElementById("statIndex").textContent = data.index_count;
+    document.getElementById("statLatestIndex").innerHTML = data.latest_index
+        ? data.latest_index + '<br><small style="font-size:.6rem;color:#999;">' + data.latest_period + '</small>'
+        : "-";
+
+    // 指数趋势
+    if (data.index_trend && data.index_trend.length) {
+        const tc = echarts.init(document.getElementById("trendChart"));
+        tc.setOption({
+            tooltip: { trigger: "axis" },
+            grid: { left: "5%", right: "5%", bottom: "10%", top: "10%", containLabel: true },
+            xAxis: { type: "category", data: data.index_trend.map(d => d.period), axisLabel: { rotate: 30 } },
+            yAxis: { type: "value", name: "指数值", nameTextStyle: { fontSize: 11 } },
+            series: [{
+                type: "line", smooth: true, data: data.index_trend.map(d => d.index),
+                lineStyle: { color: "#1890ff", width: 3 },
+                areaStyle: { color: "rgba(24,144,255,.15)" },
+                symbol: "circle", symbolSize: 8,
+                markLine: { data: [{ yAxis: 100 }], lineStyle: { color: "#ff4d4f", type: "dashed" }, label: { formatter: "基期=100" } }
+            }]
+        });
+        window.addEventListener("resize", () => tc.resize());
+    }
+
+    // 工程类型
+    if (data.project_types && data.project_types.length) {
+        const pc = echarts.init(document.getElementById("typeChart"));
+        pc.setOption({
+            tooltip: { trigger: "item", formatter: "{b}: {c}个 ({d}%)" },
+            series: [{
+                type: "pie", radius: ["40%", "70%"], center: ["50%", "55%"],
+                data: data.project_types.map(d => ({ name: d.name, value: d.count })),
+                label: { show: true, formatter: "{b}\n{d}%" },
+                itemStyle: { borderRadius: 4 },
+                color: ["#1890ff","#52c41a","#faad14","#ff4d4f"]
+            }]
+        });
+        window.addEventListener("resize", () => pc.resize());
+    }
+
+    // 工种价格
+    if (data.worker_prices && data.worker_prices.length) {
+        const wc = echarts.init(document.getElementById("workerPriceChart"));
+        wc.setOption({
+            tooltip: { trigger: "axis", formatter: "{b}<br/>均价: {c}元/工日" },
+            grid: { left: "15%", right: "5%", bottom: "15%", top: "5%" },
+            xAxis: { type: "category", data: data.worker_prices.map(d => d.name), axisLabel: { rotate: 30, fontSize: 10 } },
+            yAxis: { type: "value", name: "元/工日" },
+            series: [{
+                type: "bar", data: data.worker_prices.map(d => d.avg_price),
+                itemStyle: { color: "#1890ff", borderRadius: [4,4,0,0] },
+                label: { show: true, position: "top", formatter: "{c}", fontSize: 10 }
+            }]
+        });
+        window.addEventListener("resize", () => wc.resize());
+    }
+
+    // 城市价格
+    if (data.city_prices && data.city_prices.length) {
+        const cc = echarts.init(document.getElementById("cityPriceChart"));
+        cc.setOption({
+            tooltip: { trigger: "axis", formatter: "{b}<br/>均价: {c}元/工日" },
+            grid: { left: "10%", right: "5%", bottom: "10%", top: "5%" },
+            xAxis: { type: "category", data: data.city_prices.map(d => d.name) },
+            yAxis: { type: "value", name: "元/工日" },
+            series: [{
+                type: "bar", data: data.city_prices.map(d => d.avg_price),
+                itemStyle: { color: "#52c41a", borderRadius: [4,4,0,0] },
+                label: { show: true, position: "top", formatter: "{c}", fontSize: 10 }
+            }]
+        });
+        window.addEventListener("resize", () => cc.resize());
+    }
+}
+loadDashboard();
+</script>
+{% endblock %}
