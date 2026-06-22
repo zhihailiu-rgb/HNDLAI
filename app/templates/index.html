@@ -1,0 +1,242 @@
+﻿{% extends "base.html" %}
+{% block nav_index %}active{% endblock %}
+{% block title %}指数管理 - 海南省人工费调整指数管理系统{% endblock %}
+{% block content %}
+<div class="page-title d-flex justify-content-between align-items-center">
+    <div><h4>指数管理</h4><div class="breadcrumb text-muted">首页 / 指数管理</div></div>
+    <div>
+        <button class="btn btn-outline-primary btn-sm me-2" onclick="openCalcModal()"><i class="bi bi-calculator"></i> 计算指数</button>
+        <button class="btn btn-outline-success btn-sm" onclick="openPublishModal()"><i class="bi bi-send"></i> 批量发布</button>
+    </div>
+</div>
+
+<!-- 指数综合概览 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><i class="bi bi-bar-chart me-1"></i>各期综合指数概览</div>
+            <div class="card-body"><div id="periodChart" class="echart-container"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><i class="bi bi-people me-1"></i>各工种平均指数</div>
+            <div class="card-body"><div id="workerIndexChart" class="echart-container"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- 指数详情查询 -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-auto"><select class="form-select form-select-sm" id="qYear"><option value="">全部年份</option></select></div>
+            <div class="col-auto"><select class="form-select form-select-sm" id="qQuarter"><option value="">全部季度</option><option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option></select></div>
+            <div class="col-auto"><select class="form-select form-select-sm" id="qProject"><option value="">全部项目</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+            <div class="col-auto"><select class="form-select form-select-sm" id="qWorker"><option value="">全部工种</option>{% for w in worker_types %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+            <div class="col-auto"><button class="btn btn-sm btn-outline-primary" onclick="loadResults()"><i class="bi bi-search"></i> 查询</button></div>
+            <div class="col-auto"><span class="text-muted small" id="resultCount"></span></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-table me-1"></i>指数计算结果</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead><tr>
+                    <th>ID</th><th>项目</th><th>工种</th><th>基期价格</th><th>报告期价格</th>
+                    <th>指数值</th><th>年度</th><th>季度</th><th>发布状态</th><th>操作</th>
+                </tr></thead>
+                <tbody id="resultBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 计算 Modal -->
+<div class="modal fade" id="calcModal" tabindex="-1">
+<div class="modal-dialog modal-sm">
+<div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">计算指数</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <form id="calcForm">
+            <div class="mb-2"><label class="form-label">年份</label>
+                <select class="form-select form-select-sm" id="calcYear"></select></div>
+            <div class="mb-2"><label class="form-label">季度</label>
+                <select class="form-select form-select-sm" id="calcQuarter">
+                    <option value="1">第一季度</option>
+                    <option value="2">第二季度</option>
+                    <option value="3">第三季度</option>
+                    <option value="4" selected>第四季度</option>
+                </select></div>
+        </form>
+        <div id="calcProgress" class="d-none"><div class="spinner-border spinner-border-sm me-2"></div>正在计算...</div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="doCalculate()">开始计算</button>
+    </div>
+</div></div></div>
+
+<!-- 发布 Modal -->
+<div class="modal fade" id="publishModal" tabindex="-1">
+<div class="modal-dialog modal-sm">
+<div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">批量发布</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <form id="publishForm">
+            <div class="mb-2"><label class="form-label">年份</label>
+                <select class="form-select form-select-sm" id="pubYear"></select></div>
+            <div class="mb-2"><label class="form-label">季度</label>
+                <select class="form-select form-select-sm" id="pubQuarter">
+                    <option value="1">第一季度</option><option value="2">第二季度</option>
+                    <option value="3">第三季度</option><option value="4">第四季度</option>
+                </select></div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-sm btn-success" onclick="doPublish()">确认发布</button>
+    </div>
+</div></div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function fillYearSelects() {
+    const y = new Date().getFullYear();
+    for (let sel of ["calcYear", "pubYear"]) {
+        const el = document.getElementById(sel);
+        for (let i = y; i >= 2023; i--) {
+            const o = document.createElement("option");
+            o.value = i; o.textContent = i + "年";
+            if (i === y) o.selected = true;
+            el.appendChild(o);
+        }
+    }
+}
+fillYearSelects();
+
+function loadSummary() {
+    api("/index/api/summary").then(data => {
+        // 各期指数
+        if (data.periods && data.periods.length) {
+            const pc = echarts.init(document.getElementById("periodChart"));
+            pc.setOption({
+                tooltip: { trigger: "axis" },
+                grid: { left: "10%", right: "5%", bottom: "15%", top: "5%" },
+                xAxis: { type: "category", data: data.periods.map(d => d.year + "Q" + d.quarter).reverse() },
+                yAxis: { type: "value", name: "指数" },
+                series: [{
+                    type: "bar", data: data.periods.map(d => d.avg_index).reverse(),
+                    itemStyle: { color: "#1890ff", borderRadius: [4,4,0,0] },
+                    label: { show: true, position: "top", formatter: "{c}" }
+                }]
+            });
+            window.addEventListener("resize", () => pc.resize());
+        }
+        // 各工种指数
+        if (data.worker_indexes && data.worker_indexes.length) {
+            const wc = echarts.init(document.getElementById("workerIndexChart"));
+            wc.setOption({
+                tooltip: { trigger: "axis" },
+                grid: { left: "15%", right: "5%", bottom: "15%", top: "5%" },
+                xAxis: { type: "category", data: data.worker_indexes.map(d => d.name), axisLabel: { rotate: 25, fontSize: 10 } },
+                yAxis: { type: "value", name: "指数" },
+                series: [{
+                    type: "bar", data: data.worker_indexes.map(d => d.avg_index),
+                    itemStyle: { color: "#52c41a", borderRadius: [4,4,0,0] },
+                    label: { show: true, position: "top", formatter: "{c}", fontSize: 10 }
+                }]
+            });
+            window.addEventListener("resize", () => wc.resize());
+        }
+    });
+}
+
+function loadResults() {
+    let url = "/index/api/results?";
+    const filters = [
+        ["year", "qYear"], ["quarter", "qQuarter"],
+        ["project_id", "qProject"], ["worker_type_id", "qWorker"]
+    ];
+    filters.forEach(([k, v]) => {
+        const val = document.getElementById(v).value;
+        if (val) url += k + "=" + val + "&";
+    });
+    api(url).then(data => {
+        const b = document.getElementById("resultBody");
+        b.innerHTML = data.map(r => `<tr>
+            <td>${r.id}</td>
+            <td>${r.project_name}</td>
+            <td>${r.worker_type_name}</td>
+            <td>${r.base_price}</td>
+            <td>${r.report_price}</td>
+            <td><span class="badge badge-index fs-6">${r.index_value}</span></td>
+            <td>${r.year}</td>
+            <td>Q${r.quarter}</td>
+            <td>${r.is_published ? '<span class="badge bg-success">已发布</span>' : '<span class="badge bg-secondary">未发布</span>'}</td>
+            <td>
+                ${!r.is_published ? `<button class="btn btn-sm btn-outline-success py-0 px-2" onclick="publishOne(${r.id})"><i class="bi bi-send"></i></button>` : ""}
+            </td>
+        </tr>`).join("");
+        document.getElementById("resultCount").textContent = "共 " + data.length + " 条结果";
+    });
+}
+
+function openCalcModal() {
+    new bootstrap.Modal(document.getElementById("calcModal")).show();
+}
+
+function doCalculate() {
+    const year = parseInt(document.getElementById("calcYear").value);
+    const quarter = parseInt(document.getElementById("calcQuarter").value);
+    document.getElementById("calcProgress").classList.remove("d-none");
+    api("/index/api/calculate", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({year, quarter})
+    }).then(r => {
+        document.getElementById("calcProgress").classList.add("d-none");
+        if (r.success) {
+            showToast("计算完成，共生成 " + r.count + " 条指数", "success");
+            bootstrap.Modal.getInstance(document.getElementById("calcModal")).hide();
+            loadSummary();
+            loadResults();
+        }
+    }).catch(e => {
+        document.getElementById("calcProgress").classList.add("d-none");
+        showToast("计算失败: " + e, "danger");
+    });
+}
+
+function openPublishModal() {
+    new bootstrap.Modal(document.getElementById("publishModal")).show();
+}
+
+function doPublish() {
+    const year = parseInt(document.getElementById("pubYear").value);
+    const quarter = parseInt(document.getElementById("pubQuarter").value);
+    api("/index/api/batch-publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({year, quarter})
+    }).then(r => {
+        if (r.success) {
+            showToast("已批量发布 " + r.count + " 条指数", "success");
+            bootstrap.Modal.getInstance(document.getElementById("publishModal")).hide();
+            loadResults();
+        }
+    });
+}
+
+function publishOne(id) {
+    api("/index/api/publish/" + id, { method: "POST" }).then(r => {
+        if (r.success) { showToast("发布成功", "success"); loadResults(); }
+    });
+}
+
+loadSummary();
+loadResults();
+</script>
+{% endblock %}
