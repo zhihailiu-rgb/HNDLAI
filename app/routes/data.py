@@ -1,22 +1,25 @@
 ﻿# -*- coding: utf-8 -*-
 from flask import Blueprint, jsonify, request, render_template
+from math import ceil
 from datetime import datetime
 from app import db
-from app.models import LaborPrice, Project, WorkerType, ProjectType, City
+from app.models import LaborPrice, Project, WorkerType
 
 data_bp = Blueprint("data", __name__, url_prefix="/data")
 
 
 @data_bp.route("/")
 def data_page():
-    """数据管理页面"""
-    projects = Project.query.all()
-    worker_types = WorkerType.query.all()
+    projects = Project.query.order_by(Project.name).all()
+    worker_types = WorkerType.query.order_by(WorkerType.name).all()
     return render_template("data.html", projects=projects, worker_types=worker_types)
 
 
 @data_bp.route("/api/list")
 def list_prices():
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = min(per_page, 100)
     project_id = request.args.get("project_id")
     worker_type_id = request.args.get("worker_type_id")
     q = LaborPrice.query
@@ -24,8 +27,16 @@ def list_prices():
         q = q.filter_by(project_id=int(project_id))
     if worker_type_id:
         q = q.filter_by(worker_type_id=int(worker_type_id))
-    prices = q.order_by(LaborPrice.data_date.desc()).all()
-    return jsonify([p.to_dict() for p in prices])
+    q = q.order_by(LaborPrice.data_date.desc(), LaborPrice.id.desc())
+    total = q.count()
+    pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        "items": [p.to_dict() for p in pagination.items],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": ceil(total / per_page) if total > 0 else 1,
+    })
 
 
 @data_bp.route("/api/add", methods=["POST"])
@@ -63,11 +74,10 @@ def verify_price(pid):
 
 @data_bp.route("/api/trend")
 def price_trend():
-    """按工种的各季度均价趋势"""
     worker_type_id = request.args.get("worker_type_id", type=int)
     q = db.session.query(
         LaborPrice.data_date, WorkerType.name,
-        func.avg(LaborPrice.unit_price).label("avg_price")
+        db.func.avg(LaborPrice.unit_price).label("avg_price")
     ).join(WorkerType, WorkerType.id == LaborPrice.worker_type_id
     ).group_by(LaborPrice.data_date, WorkerType.name)
     if worker_type_id:
