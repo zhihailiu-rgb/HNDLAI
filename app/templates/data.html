@@ -11,13 +11,13 @@
     <div class="card-body py-2">
         <div class="row g-2 align-items-end">
             <div class="col-auto">
-                <select class="form-select form-select-sm" id="filterProject" onchange="loadPrices()">
+                <select class="form-select form-select-sm" id="filterProject" onchange="loadPrices(1)">
                     <option value="">全部项目</option>
-                    {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+                    {% for p in projects %}<option value="{{ p.id }}">{{ p.name[:30] }}</option>{% endfor %}
                 </select>
             </div>
             <div class="col-auto">
-                <select class="form-select form-select-sm" id="filterWorker" onchange="loadPrices()">
+                <select class="form-select form-select-sm" id="filterWorker" onchange="loadPrices(1)">
                     <option value="">全部工种</option>
                     {% for w in worker_types %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
                 </select>
@@ -40,6 +40,7 @@
             </table>
         </div>
     </div>
+    <div class="card-footer bg-white py-1" id="pricePagination"></div>
 </div>
 
 <div class="card mt-3">
@@ -67,7 +68,7 @@
         <form id="priceForm">
             <div class="mb-2"><label class="form-label">项目</label>
                 <select class="form-select form-select-sm" id="addProject">
-                    {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+                    {% for p in projects %}<option value="{{ p.id }}">{{ p.name[:30] }}</option>{% endfor %}
                 </select></div>
             <div class="mb-2"><label class="form-label">工种</label>
                 <select class="form-select form-select-sm" id="addWorker">
@@ -94,29 +95,37 @@
 
 {% block scripts %}
 <script>
-function loadPrices() {
+let pricePage = 1;
+
+function loadPrices(pg) {
+    if (pg !== undefined) pricePage = pg;
     const pid = document.getElementById("filterProject").value;
     const wid = document.getElementById("filterWorker").value;
-    let url = "/data/api/list?";
-    if (pid) url += "project_id=" + pid + "&";
-    if (wid) url += "worker_type_id=" + wid + "&";
+    document.getElementById("priceBody").innerHTML = '<tr><td colspan="8" class="text-center py-3"><span class="spinner-border spinner-border-sm me-2"></span>加载中...</td></tr>';
+    let url = "/data/api/list?page=" + pricePage + "&per_page=20";
+    if (pid) url += "&project_id=" + pid;
+    if (wid) url += "&worker_type_id=" + wid;
     api(url).then(data => {
         const b = document.getElementById("priceBody");
-        b.innerHTML = data.map(p => `<tr>
-            <td>${p.id}</td>
-            <td>${p.project_name}</td>
-            <td>${p.worker_type_name}</td>
-            <td><strong>${p.unit_price}</strong> 元</td>
-            <td>${p.data_date}</td>
-            <td>${p.source || "-"}</td>
-            <td>${p.is_verified ? '<span class="badge bg-success">已审核</span>' : '<span class="badge bg-warning text-dark">待审核</span>'}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="toggleVerify(${p.id})" title="审核切换"><i class="bi bi-check-circle"></i></button>
-                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deletePrice(${p.id})"><i class="bi bi-trash"></i></button>
-            </td>
-        </tr>`).join("");
-        document.getElementById("priceCount").textContent = "共 " + data.length + " 条记录";
-        loadTrend();
+        if (!data.items || data.items.length === 0) {
+            b.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">暂无数据，请调整筛选条件或录入新价格</td></tr>';
+        } else {
+            b.innerHTML = data.items.map(p => `<tr>
+                <td>${p.id}</td>
+                <td title="${p.project_name}">${p.project_name.length > 18 ? p.project_name.slice(0,18)+"..." : p.project_name}</td>
+                <td>${p.worker_type_name}</td>
+                <td><strong>${p.unit_price}</strong> 元</td>
+                <td>${p.data_date}</td>
+                <td>${p.source || "-"}</td>
+                <td>${p.is_verified ? '<span class="badge bg-success">已审核</span>' : '<span class="badge bg-warning text-dark">待审核</span>'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="toggleVerify(${p.id})" title="审核切换"><i class="bi bi-check-circle"></i></button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deletePrice(${p.id})"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>`).join("");
+        }
+        document.getElementById("priceCount").textContent = "共 " + data.total + " 条记录";
+        renderPagination(data, "pricePagination", pg => loadPrices(pg));
     });
 }
 function openAddModal() {
@@ -138,7 +147,7 @@ function savePrice() {
     api("/data/api/add", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) }).then(r => {
         if (r.success) { showToast("录入成功", "success");
             bootstrap.Modal.getInstance(document.getElementById("priceModal")).hide();
-            loadPrices(); }
+            loadPrices(1); }
     });
 }
 function deletePrice(id) {
@@ -173,6 +182,6 @@ function loadTrend() {
         window.addEventListener("resize", () => chart.resize());
     });
 }
-loadPrices();
+loadPrices(1);
 </script>
 {% endblock %}
