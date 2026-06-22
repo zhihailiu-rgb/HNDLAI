@@ -1,0 +1,138 @@
+﻿{% extends "base.html" %}
+{% block nav_projects %}active{% endblock %}
+{% block title %}项目管理 - 海南省人工费调整指数管理系统{% endblock %}
+{% block content %}
+<div class="page-title d-flex justify-content-between align-items-center">
+    <div><h4>项目管理</h4><div class="breadcrumb text-muted">首页 / 项目管理</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openAddModal()"><i class="bi bi-plus-lg"></i> 新增项目</button>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul me-1"></i>工程项目列表</span>
+        <span class="text-muted small" id="projectCount">加载中...</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0" id="projectTable">
+                <thead><tr>
+                    <th>ID</th><th>项目名称</th><th>工程类型</th><th>所在城市</th>
+                    <th>建筑面积(㎡)</th><th>总用工(工日)</th><th>创建时间</th><th>操作</th>
+                </tr></thead>
+                <tbody id="projectBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑 Modal -->
+<div class="modal fade" id="projectModal" tabindex="-1">
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modalTitle">新增项目</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <form id="projectForm">
+            <input type="hidden" id="editId">
+            <div class="row g-3">
+                <div class="col-md-8"><label class="form-label">项目名称</label>
+                    <input class="form-control form-control-sm" id="pName" required></div>
+                <div class="col-md-4"><label class="form-label">工程类型</label>
+                    <select class="form-select form-select-sm" id="pType">
+                        {% for t in types %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+                    </select></div>
+                <div class="col-md-4"><label class="form-label">所在城市</label>
+                    <select class="form-select form-select-sm" id="pCity">
+                        {% for c in cities %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                    </select></div>
+                <div class="col-md-4"><label class="form-label">建筑面积（㎡）</label>
+                    <input type="number" step="0.1" class="form-control form-control-sm" id="pArea"></div>
+                <div class="col-md-4"><label class="form-label">总用工量（工日）</label>
+                    <input type="number" class="form-control form-control-sm" id="pWorkers"></div>
+                <div class="col-md-4"><label class="form-label">开工日期</label>
+                    <input type="date" class="form-control form-control-sm" id="pStart"></div>
+                <div class="col-md-4"><label class="form-label">竣工日期</label>
+                    <input type="date" class="form-control form-control-sm" id="pEnd"></div>
+                <div class="col-12"><label class="form-label">项目描述</label>
+                    <textarea class="form-control form-control-sm" id="pDesc" rows="2"></textarea></div>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="saveProject()">保存</button>
+    </div>
+</div></div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let editId = null;
+function loadProjects() {
+    api("/projects/api/list").then(data => {
+        const tbody = document.getElementById("projectBody");
+        tbody.innerHTML = data.map(p => `<tr>
+            <td>${p.id}</td>
+            <td><strong>${p.name}</strong></td>
+            <td><span class="badge bg-light text-dark">${p.project_type_name}</span></td>
+            <td>${p.city_name}</td>
+            <td>${p.building_area || "-"}</td>
+            <td>${p.total_workers || "-"}</td>
+            <td><small class="text-muted">${(p.created_at || "").slice(0,10)}</small></td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openEditModal(${p.id})"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteProject(${p.id})"><i class="bi bi-trash"></i></button>
+            </td>
+        </tr>`).join("");
+        document.getElementById("projectCount").textContent = "共 " + data.length + " 个项目";
+    });
+}
+function openAddModal() {
+    editId = null; document.getElementById("modalTitle").textContent = "新增项目";
+    document.getElementById("projectForm").reset();
+    document.getElementById("editId").value = "";
+    new bootstrap.Modal(document.getElementById("projectModal")).show();
+}
+function openEditModal(id) {
+    editId = id; document.getElementById("modalTitle").textContent = "编辑项目";
+    api("/projects/api/get/" + id).then(p => {
+        document.getElementById("editId").value = p.id;
+        document.getElementById("pName").value = p.name;
+        document.getElementById("pType").value = p.project_type_id;
+        document.getElementById("pCity").value = p.city_id;
+        document.getElementById("pArea").value = p.building_area || "";
+        document.getElementById("pWorkers").value = p.total_workers || "";
+        document.getElementById("pStart").value = p.start_date || "";
+        document.getElementById("pEnd").value = p.end_date || "";
+        document.getElementById("pDesc").value = p.description || "";
+        new bootstrap.Modal(document.getElementById("projectModal")).show();
+    });
+}
+function saveProject() {
+    const data = {
+        name: document.getElementById("pName").value.trim(),
+        project_type_id: parseInt(document.getElementById("pType").value),
+        city_id: parseInt(document.getElementById("pCity").value),
+        building_area: parseFloat(document.getElementById("pArea").value) || null,
+        total_workers: parseInt(document.getElementById("pWorkers").value) || null,
+        start_date: document.getElementById("pStart").value || null,
+        end_date: document.getElementById("pEnd").value || null,
+        description: document.getElementById("pDesc").value.trim(),
+    };
+    if (!data.name) { showToast("请输入项目名称", "warning"); return; }
+    const url = editId ? "/projects/api/update/" + editId : "/projects/api/add";
+    api(url, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) }).then(r => {
+        if (r.success) { showToast(editId ? "更新成功" : "新增成功", "success");
+            bootstrap.Modal.getInstance(document.getElementById("projectModal")).hide();
+            loadProjects(); }
+    });
+}
+function deleteProject(id) {
+    if (!confirm("确定要删除该项目及其关联数据？")) return;
+    api("/projects/api/delete/" + id, { method: "POST" }).then(r => {
+        if (r.success) { showToast("已删除", "success"); loadProjects(); }
+    });
+}
+loadProjects();
+</script>
+{% endblock %}
