@@ -23,9 +23,9 @@
             </table>
         </div>
     </div>
+    <div class="card-footer bg-white py-1" id="projectPagination"></div>
 </div>
 
-<!-- 新增/编辑 Modal -->
 <div class="modal fade" id="projectModal" tabindex="-1">
 <div class="modal-dialog modal-lg">
 <div class="modal-content">
@@ -68,23 +68,32 @@
 {% block scripts %}
 <script>
 let editId = null;
-function loadProjects() {
-    api("/projects/api/list").then(data => {
+let currentPage = 1;
+
+function loadProjects(pg) {
+    if (pg !== undefined) currentPage = pg;
+    document.getElementById("projectBody").innerHTML = '<tr><td colspan="8" class="text-center py-3"><span class="spinner-border spinner-border-sm me-2"></span>加载中...</td></tr>';
+    api("/projects/api/list?page=" + currentPage + "&per_page=20").then(data => {
         const tbody = document.getElementById("projectBody");
-        tbody.innerHTML = data.map(p => `<tr>
-            <td>${p.id}</td>
-            <td><strong>${p.name}</strong></td>
-            <td><span class="badge bg-light text-dark">${p.project_type_name}</span></td>
-            <td>${p.city_name}</td>
-            <td>${p.building_area || "-"}</td>
-            <td>${p.total_workers || "-"}</td>
-            <td><small class="text-muted">${(p.created_at || "").slice(0,10)}</small></td>
-            <td>
-                <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openEditModal(${p.id})"><i class="bi bi-pencil"></i></button>
-                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteProject(${p.id})"><i class="bi bi-trash"></i></button>
-            </td>
-        </tr>`).join("");
-        document.getElementById("projectCount").textContent = "共 " + data.length + " 个项目";
+        if (!data.items || data.items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">暂无项目数据</td></tr>';
+        } else {
+            tbody.innerHTML = data.items.map(p => `<tr>
+                <td>${p.id}</td>
+                <td><strong>${p.name}</strong></td>
+                <td><span class="badge bg-light text-dark">${p.project_type_name}</span></td>
+                <td>${p.city_name}</td>
+                <td>${p.building_area || "-"}</td>
+                <td>${p.total_workers || "-"}</td>
+                <td><small class="text-muted">${(p.created_at || "").slice(0,10)}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openEditModal(${p.id})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteProject(${p.id})"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>`).join("");
+        }
+        document.getElementById("projectCount").textContent = "共 " + data.total + " 个项目";
+        renderPagination(data, "projectPagination", pg => loadProjects(pg));
     });
 }
 function openAddModal() {
@@ -124,7 +133,7 @@ function saveProject() {
     api(url, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) }).then(r => {
         if (r.success) { showToast(editId ? "更新成功" : "新增成功", "success");
             bootstrap.Modal.getInstance(document.getElementById("projectModal")).hide();
-            loadProjects(); }
+            loadProjects(1); }
     });
 }
 function deleteProject(id) {
@@ -133,6 +142,6 @@ function deleteProject(id) {
         if (r.success) { showToast("已删除", "success"); loadProjects(); }
     });
 }
-loadProjects();
+loadProjects(1);
 </script>
 {% endblock %}
